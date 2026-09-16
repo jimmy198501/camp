@@ -397,8 +397,8 @@ function personFields(prefix,obj,opts={}){
     ${opts.bed?`
     <label class="f">床位</label>
     <div class="bed" id="${prefix}_bed">
-      <label class="${obj.bed!=='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="佔床" ${obj.bed!=='不佔床'?'checked':''}>佔床</label>
-      <label class="${obj.bed==='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="不佔床" ${obj.bed==='不佔床'?'checked':''}>不佔床（小孩免費）</label>
+      <label class="${obj.bed!=='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="佔床" ${obj.bed!=='不佔床'?'checked':''} onchange="onBed('${prefix}')">佔床</label>
+      <label class="${obj.bed==='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="不佔床" ${obj.bed==='不佔床'?'checked':''} onchange="onBed('${prefix}')">不佔床（小孩免費）</label>
     </div>`:''}
     <div id="${prefix}_guard" class="${showGuardian?'':'hidden'}">
       <label class="f">法定代理人／監護人姓名 <span class="req">*</span><span class="hint" style="font-weight:400">（未滿 15 歲須填）</span></label>
@@ -411,6 +411,10 @@ function onBirth(prefix){
   const v=document.getElementById(prefix+'_birth').value;
   const g=document.getElementById(prefix+'_guard');
   if(g) g.classList.toggle('hidden', !isUnder15(v));
+}
+function onBed(prefix){
+  const box=document.getElementById(prefix+'_bed'); if(!box)return;
+  box.querySelectorAll('label').forEach(l=>{ const inp=l.querySelector('input'); l.classList.toggle('sel', !!(inp&&inp.checked)); });
 }
 
 function rContact(){
