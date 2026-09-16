@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>報名管理後台｜韋宏B 年終露營</title>
+
+<!-- 與報名表同一個 Firebase 專案 -->
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyCESSWmDifF8FyVSzTU7YGMNv4UZkqsZuo",
+  authDomain: "camp-weihong.firebaseapp.com",
+  projectId: "camp-weihong",
+  storageBucket: "camp-weihong.firebasestorage.app",
+  messagingSenderId: "873391007452",
+  appId: "1:873391007452:web:27ad428d50855a5563f619"
+};
+const EVENT_DATE = new Date(2025,11,19);
+</script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#22303f;--soft:#5b6b7a;--line:#e3e8ee;
+  --pine:#3a7a5e;--pine-d:#2c5f48;--amber:#e8a54b;--amber-d:#c9851f;--danger:#c0492f;
+  --sky:#1b2a4a;--radius:14px;--shadow:0 6px 22px rgba(27,42,74,.08)}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Noto Sans TC",system-ui,sans-serif;color:var(--ink);background:var(--bg);line-height:1.6}
+.wrap{max-width:1100px;margin:0 auto;padding:16px}
+header.top{background:var(--sky);color:#fff;padding:16px 0}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+header.top h1{font-size:18px;margin:0}
+header.top .who{font-size:13px;opacity:.85}
+.btn{font:inherit;font-weight:700;border:1.5px solid transparent;border-radius:10px;padding:9px 15px;cursor:pointer;transition:.15s}
+.btn.primary{background:var(--amber);color:#3a2c0e}.btn.primary:hover{background:var(--amber-d);color:#fff}
+.btn.ghost{background:#fff;border-color:var(--line);color:var(--ink)}
+.btn.ghost:hover{border-color:var(--soft)}
+.btn.mini{padding:5px 10px;font-size:12.5px;font-weight:500}
+.btn.danger{background:#fff;border-color:#e6b3a8;color:var(--danger)}
+.btn.danger:hover{background:var(--danger);color:#fff}
+.btn.pine{background:var(--pine);color:#fff}.btn.pine:hover{background:var(--pine-d)}
+
+/* login */
+.login{max-width:380px;margin:8vh auto;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:26px 22px}
+.login h2{margin:0 0 4px}.login p{color:var(--soft);font-size:13.5px;margin:0 0 18px}
+.login label{display:block;font-size:13.5px;font-weight:500;margin:12px 0 5px}
+.login input{width:100%;font:inherit;border:1.5px solid var(--line);border-radius:10px;padding:11px 13px;outline:none}
+.login input:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,165,75,.18)}
+.login .btn{width:100%;margin-top:18px}
+.login .err{color:var(--danger);font-size:13px;margin-top:10px;min-height:18px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:16px 0}
+@media(max-width:720px){.stats{grid-template-columns:1fr 1fr}}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.stat .n{font-size:26px;font-weight:900;color:var(--pine-d)}
+.stat .l{font-size:12.5px;color:var(--soft)}
+
+.panel{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-top:16px}
+.panel h3{margin:0 0 12px;font-size:16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.panel h3 .tools{display:flex;gap:8px;flex-wrap:wrap}
+
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--soft);font-weight:700;font-size:12.5px;white-space:nowrap}
+tbody tr:hover{background:#fafbfc}
+.tag{display:inline-block;font-size:11.5px;font-weight:700;padding:2px 8px;border-radius:99px}
+.tag.full{background:#eef4ef;color:var(--pine-d)}
+.tag.wish{background:#fdf1e3;color:var(--amber-d)}
+.stockbar{height:6px;background:#eef0f2;border-radius:99px;overflow:hidden;margin-top:5px;min-width:90px}
+.stockbar i{display:block;height:100%;background:var(--pine)}
+.stockbar i.low{background:var(--amber)} .stockbar i.zero{background:var(--danger)}
+.mini-people{font-size:12.5px;color:var(--soft);margin-top:4px}
+.mini-people b{color:var(--ink)}
+details summary{cursor:pointer;color:var(--pine-d);font-weight:500;font-size:12.5px}
+details table{margin-top:8px;font-size:12.5px}
+.scroll{overflow-x:auto}
+.empty{color:var(--soft);text-align:center;padding:30px}
+.hidden{display:none!important}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--sky);color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;box-shadow:var(--shadow);opacity:0;transition:.25s;z-index:99;pointer-events:none}
+.toast.show{opacity:1}
+.note{font-size:12.5px;color:var(--soft);margin-top:8px}
+</style>
+</head>
+<body>
+
+<!-- 登入畫面 -->
+<div id="loginView">
+  <div class="login">
+    <h2>報名管理後台</h2>
+    <p>韋宏B 年終露營趣 · 管理者登入</p>
+    <label>管理者 Email</label>
+    <input type="email" id="loginEmail" placeholder="you@example.com" autocomplete="username">
+    <label>密碼</label>
+    <input type="password" id="loginPw" placeholder="密碼" autocomplete="current-password">
+    <button class="btn primary" id="loginBtn">登入</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- 後台主畫面 -->
+<div id="adminView" class="hidden">
+  <header class="top">
+    <div class="wrap">
+      <h1>⛺️ 報名管理後台</h1>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="who" id="whoami"></span>
+        <button class="btn ghost mini" id="logoutBtn">登出</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="stats" id="stats"></div>
+
+    <div class="panel">
+      <h3>帳位庫存
+        <span class="tools">
+          <button class="btn ghost mini" id="recalcBtn" title="依實際「已滿4人」報名重新計算各帳已用數量">重算庫存</button>
+        </span>
+      </h3>
+      <div class="scroll"><table id="stockTable"></table></div>
+      <div class="note">「重算庫存」會依目前所有「已滿4人」的報名，重新算出每個帳型的已用數 — 刪除測試資料後可用它把數字校正回來。</div>
+    </div>
+
+    <div class="panel">
+      <h3>報名清單（<span id="regCount">0</span>）
+        <span class="tools">
+          <button class="btn ghost mini" id="refreshBtn">重新整理</button>
+          <button class="btn pine mini" id="exportBtn">匯出 Excel</button>
+        </span>
+      </h3>
+      <div class="scroll"><table id="regTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+firebase.initializeApp(FIREBASE_CONFIG);
+const auth=firebase.auth(); const db=firebase.firestore();
+
+let REGS=[]; let TENTS_LIVE={}; let unsubR=null, unsubT=null;
+
+/* ── 登入 ── */
+document.getElementById('loginBtn').onclick=doLogin;
+document.getElementById('loginPw').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+function doLogin(){
+  const em=document.getElementById('loginEmail').value.trim();
+  const pw=document.getElementById('loginPw').value;
+  const err=document.getElementById('loginErr'); err.textContent='';
+  auth.signInWithEmailAndPassword(em,pw).catch(e=>{
+    err.textContent = e.code==='auth/invalid-credential'||e.code==='auth/wrong-password'||e.code==='auth/user-not-found'
+      ? '帳號或密碼錯誤' : ('登入失敗：'+e.code);
+  });
+}
+document.getElementById('logoutBtn').onclick=()=>auth.signOut();
+
+auth.onAuthStateChanged(u=>{
+  if(u){
+    document.getElementById('loginView').classList.add('hidden');
+    document.getElementById('adminView').classList.remove('hidden');
+    document.getElementById('whoami').textContent=u.email;
+    start();
+  }else{
+    document.getElementById('adminView').classList.add('hidden');
+    document.getElementById('loginView').classList.remove('hidden');
+    if(unsubR)unsubR(); if(unsubT)unsubT();
+  }
+});
+
+/* ── 監聽資料 ── */
+function start(){
+  unsubT=db.collection('tents').onSnapshot(s=>{
+    TENTS_LIVE={}; s.forEach(d=>TENTS_LIVE[d.id]=d.data()); renderStock();
+  }, err=>toast('讀取帳位失敗：'+err.code));
+  unsubR=db.collection('registrations').orderBy('createdAt','desc').onSnapshot(s=>{
+    REGS=s.docs.map(d=>({_id:d.id,...d.data()})); renderAll();
+  }, err=>{
+    // 若沒建 index，orderBy 可能失敗，改用不排序
+    db.collection('registrations').onSnapshot(s2=>{ REGS=s2.docs.map(d=>({_id:d.id,...d.data()})); renderAll(); });
+  });
+}
+document.getElementById('refreshBtn').onclick=()=>{ if(auth.currentUser){ toast('已是即時更新'); } };
+
+/* ── 計算 ── */
+function under15(b){ if(!b)return false; const d=new Date(b); let a=EVENT_DATE.getFullYear()-d.getFullYear(); const m=EVENT_DATE.getMonth()-d.getMonth(); if(m<0||(m===0&&EVENT_DATE.getDate()<d.getDate()))a--; return a<15; }
+function peopleOf(r){
+  const c=r.contact||{}; const arr=[{role:'主報名', ...c, bed:'佔床'}];
+  (r.mates||[]).forEach((m,i)=>arr.push({role:'同行'+(i+1), ...m}));
+  return arr;
+}
+
+/* ── 統計卡 ── */
+function renderAll(){
+  document.getElementById('regCount').textContent=REGS.length;
+  let people=0, kids=0, full=0, wish=0;
+  REGS.forEach(r=>{ const ppl=peopleOf(r); people+=ppl.length; kids+=ppl.filter(p=>under15(p.birth)).length;
+    if(r.full==='已滿')full++; else wish++; });
+  const cards=[
+    ['報名筆數',REGS.length],['總人數',people],
+    ['已滿4人 / 未滿4人', full+' / '+wish],['其中未滿15歲',kids]
+  ];
+  document.getElementById('stats').innerHTML=cards.map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
+  renderRegs();
+}
+
+/* ── 帳位庫存表 ── */
+const TENT_ORDER=['mengguba','caixia','wenxin','bft_a','bft_b','bft_c','bft_d','ybb','cd_a','cd_b','cd_c'];
+function renderStock(){
+  const rows=TENT_ORDER.filter(id=>TENTS_LIVE[id]).map(id=>{
+    const t=TENTS_LIVE[id]; const taken=t.taken||0, total=t.total||0, rem=total-taken;
+    const pct=total?Math.round(taken/total*100):0;
+    const cls=rem<=0?'zero':(rem<=2?'low':'');
+    return `<tr><td><b>${t.name||id}</b></td>
+      <td>${taken} / ${total}</td>
+      <td>剩 ${rem}<div class="stockbar"><i class="${cls}" style="width:${pct}%"></i></div></td></tr>`;
+  }).join('');
+  document.getElementById('stockTable').innerHTML=
+    `<thead><tr><th>帳型</th><th>已用 / 總數</th><th>剩餘</th></tr></thead><tbody>${rows||'<tr><td colspan=3 class=empty>尚無帳位資料</td></tr>'}</tbody>`;
+}
+
+/* ── 報名清單 ── */
+function fmtTime(ts){
+  try{ const d = ts && ts.toDate ? ts.toDate() : (ts?new Date(ts):null); if(!d)return '—';
+    return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+  }catch(e){ return '—'; }
+}
+function tentText(r){
+  if(r.full==='已滿') return (r.tent&&r.tent.label)||'—';
+  const w=(r.wishes||[]).map((x,i)=>`${i+1}.${x.label||x.id}`).join('、');
+  return w||'—';
+}
+function renderRegs(){
+  if(!REGS.length){ document.getElementById('regTable').innerHTML='<tbody><tr><td class=empty>目前沒有報名資料</td></tr></tbody>'; return; }
+  const rows=REGS.map(r=>{
+    const c=r.contact||{}; const ppl=peopleOf(r);
+    const detail=ppl.map(p=>`<tr><td>${p.role}</td><td>${esc(p.name)}</td><td>${esc(p.birth)}</td><td>${esc(p.id)}</td><td>${esc(p.diet||'')}</td><td>${under15(p.birth)?'未滿15':'—'}</td><td>${esc(p.guardian||'')}</td><td>${esc(p.bed||'佔床')}</td></tr>`).join('');
+    return `<tr>
+      <td>${fmtTime(r.createdAt)}</td>
+      <td><b>${esc(c.name)}</b><div class="mini-people">${esc(c.phone||'')}<br>${esc(c.email||'')}</div></td>
+      <td>${ppl.length} 人${r.nightRush==='是'?'<br><span class="tag wish">夜衝</span>':''}</td>
+      <td>${r.full==='已滿'?'<span class="tag full">已滿</span>':'<span class="tag wish">未滿</span>'}<br>${esc(tentText(r))}</td>
+      <td><details><summary>展開 ${ppl.length} 人保險資料</summary>
+        <table><thead><tr><th>身份</th><th>姓名</th><th>生日</th><th>身分證</th><th>飲食</th><th>未滿15</th><th>監護人</th><th>床位</th></tr></thead><tbody>${detail}</tbody></table>
+        ${r.mergeNote?`<div class="note">併帳備註：${esc(r.mergeNote)}</div>`:''}
+      </details></td>
+      <td><button class="btn danger mini" onclick="delReg('${r._id}')">刪除</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('regTable').innerHTML=
+    `<thead><tr><th>時間</th><th>主報名人</th><th>人數</th><th>帳篷</th><th>參加人員</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+/* ── 刪除單筆（已滿的同時把該帳位 -1） ── */
+async function delReg(id){
+  const r=REGS.find(x=>x._id===id); if(!r)return;
+  if(!confirm(`確定刪除「${(r.contact&&r.contact.name)||'此筆'}」的報名？`+(r.full==='已滿'?'\n（會把該帳位釋放 -1）':''))) return;
+  try{
+    if(r.full==='已滿' && r.tent && r.tent.id){
+      const tref=db.collection('tents').doc(r.tent.id);
+      await db.runTransaction(async tx=>{
+        const s=await tx.get(tref); const cur=s.exists?(s.data().taken||0):0;
+        tx.update(tref,{taken:Math.max(0,cur-1)});
+        tx.delete(db.collection('registrations').doc(id));
+      });
+    }else{
+      await db.collection('registrations').doc(id).delete();
+    }
+    toast('已刪除');
+  }catch(e){ console.error(e); toast('刪除失敗：'+(e.code||e.message)); }
+}
+
+/* ── 重算庫存 ── */
+document.getElementById('recalcBtn').onclick=async ()=>{
+  if(!confirm('依目前所有「已滿4人」報名，重新計算每個帳型的已用數量？')) return;
+  const count={};
+  REGS.forEach(r=>{ if(r.full==='已滿' && r.tent && r.tent.id){ count[r.tent.id]=(count[r.tent.id]||0)+1; } });
+  try{
+    const batch=db.batch();
+    TENT_ORDER.forEach(id=>{ if(TENTS_LIVE[id]) batch.update(db.collection('tents').doc(id),{taken:count[id]||0}); });
+    await batch.commit(); toast('庫存已重算校正');
+  }catch(e){ console.error(e); toast('重算失敗：'+(e.code||e.message)); }
+};
+
+/* ── 匯出 Excel（2 分頁：報名總表 + 保險名冊） ── */
+document.getElementById('exportBtn').onclick=()=>{
+  if(!REGS.length){ toast('沒有資料可匯出'); return; }
+  // 分頁1：報名總表（一列一筆）
+  const main=REGS.map(r=>{
+    const c=r.contact||{}; const ppl=peopleOf(r);
+    return {
+      '報名編號':r._id, '報名時間':fmtTime(r.createdAt),
+      '主報名人':c.name||'', '電話':c.phone||'', 'Email':c.email||'',
+      '總人數':ppl.length, '夜衝':r.nightRush||'',
+      '人數確認':r.full==='已滿'?'已滿4人':'未滿4人',
+      '帳篷/志願':tentText(r), '併帳備註':r.mergeNote||''
+    };
+  });
+  // 分頁2：保險名冊（一列一人）
+  const ins=[];
+  REGS.forEach(r=>{ peopleOf(r).forEach(p=>{
+    ins.push({
+      '報名編號':r._id, '主報名人':(r.contact&&r.contact.name)||'',
+      '身份':p.role, '姓名':p.name||'', '生日':p.birth||'', '身分證字號':p.id||'',
+      '飲食':p.diet||'', '床位':p.bed||'佔床',
+      '未滿15歲':under15(p.birth)?'是':'', '監護人':p.guardian||'',
+      '夜衝':r.nightRush||'', '帳篷/志願':tentText(r)
+    });
+  }); });
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(main), '報名總表');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(ins), '保險名冊');
+  const d=new Date(); const stamp=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}_${String(d.getHours()).padStart(2,'0')}${String(d.getMinutes()).padStart(2,'0')}`;
+  XLSX.writeFile(wb, `露營報名_${stamp}.xlsx`);
+  toast('已匯出 Excel');
+};
+
+function esc(s){return (s==null?'':(''+s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);}
+</script>
+</body>
+</html>

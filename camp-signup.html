@@ -281,6 +281,7 @@ function watchStock(){
 }
 
 /* ═══════════ 台灣身分證檢查（軟性：不符只提醒不擋，含居留證彈性） ═══════════ */
+function idFormatOk(v){ return /^[A-Za-z][0-9]{9}$/.test((v||'').trim()); }
 function twidLooksValid(id){
   id=(id||'').toUpperCase().trim();
   if(!/^[A-Z][12][0-9]{8}$/.test(id)) return null; // 非標準國民身分證格式 → 不判斷
@@ -432,7 +433,8 @@ function saveContact(){
   ok=req('c_email',/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(c.email))&&ok;
   ok=req('c_phone',!!c.phone)&&ok;
   ok=req('c_birth',!!c.birth)&&ok;
-  ok=req('c_id',!!c.id)&&ok;
+  { const e=document.getElementById('c_id_e'); if(e) e.textContent = c.id? '身分證格式須為 1 碼英文字母 ＋ 9 碼數字（共 10 碼）' : '請填寫身分證字號'; }
+  ok=req('c_id',idFormatOk(c.id))&&ok;
   if(isUnder15(c.birth)) ok=req('c_guardian',!!c.guardian)&&ok;
   if(!ok){ toast('請完成必填欄位'); return; }
   currentStep=STEP_MATES; render();
@@ -476,7 +478,8 @@ function saveMates(){
   state.mates.forEach((m,i)=>{
     ok=req('m'+i+'_name',!!m.name)&&ok;
     ok=req('m'+i+'_birth',!!m.birth)&&ok;
-    ok=req('m'+i+'_id',!!m.id)&&ok;
+    { const e=document.getElementById('m'+i+'_id_e'); if(e) e.textContent = m.id? '身分證格式須為 1 碼英文字母 ＋ 9 碼數字（共 10 碼）' : '請填寫身分證字號'; }
+    ok=req('m'+i+'_id',idFormatOk(m.id))&&ok;
     if(isUnder15(m.birth)) ok=req('m'+i+'_guardian',!!m.guardian)&&ok;
   });
   if(!ok){ toast('同行者資料未填完整'); return; }
