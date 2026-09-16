@@ -357,7 +357,7 @@ function rIntro(){
      <div class="notice">
        <b>重點提醒</b>
        <ul>
-         <li>一帳以 <b>4 人</b> 為單位；嬰幼兒不佔床可免帳費，但仍需填保險資料。</li>
+         <li>一帳以 <b>4 人</b> 為單位；小孩不佔床可免帳費，但仍需填保險資料。</li>
          <li>帳篷<b>數量有限、選完為止</b>，越早報名越能選到想住的帳。</li>
          <li>身分證字號與生日<b>僅用於辦理平安保險</b>，不作其他用途。</li>
          <li>每帳準備 4 道菜（1 人 1 菜、每道 4 人份）。</li>
@@ -398,7 +398,7 @@ function personFields(prefix,obj,opts={}){
     <label class="f">床位</label>
     <div class="bed" id="${prefix}_bed">
       <label class="${obj.bed!=='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="佔床" ${obj.bed!=='不佔床'?'checked':''}>佔床</label>
-      <label class="${obj.bed==='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="不佔床" ${obj.bed==='不佔床'?'checked':''}>不佔床（嬰幼兒免費）</label>
+      <label class="${obj.bed==='不佔床'?'sel':''}"><input type="radio" name="${prefix}_bed" value="不佔床" ${obj.bed==='不佔床'?'checked':''}>不佔床（小孩免費）</label>
     </div>`:''}
     <div id="${prefix}_guard" class="${showGuardian?'':'hidden'}">
       <label class="f">法定代理人／監護人姓名 <span class="req">*</span><span class="hint" style="font-weight:400">（未滿 15 歲須填）</span></label>
@@ -445,7 +445,7 @@ function rMates(){
    <div class="step">
      <span class="stepno">步驟 2 / 6</span>
      <h2>同行者資料</h2>
-     <p class="sub">最多可再填 4 位（含嬰幼兒）。每位都要收保險資料。</p>
+     <p class="sub">最多可再填 4 位（含小孩）。每位都要收保險資料。</p>
      <div id="mateList"></div>
      <button class="addmate" id="addMate" ${state.mates.length>=4?'disabled':''} onclick="addMate()">＋ 新增同行者（${state.mates.length}/4）</button>
    </div>`;
@@ -487,11 +487,25 @@ function saveMates(){
 }
 
 function rNight(){
+  const yen=n=>'+$'+Number(n).toLocaleString();
+  const NL=[
+    ['蒙古包', yen(TENT.mengguba.night)],
+    ['彩霞帳', yen(TENT.caixia.night)],
+    ['溫馨帳', yen(TENT.wenxin.night)],
+    ['避風塘 A／B／C／D', yen(TENT.bft_a.night)],
+    ['營本部便利露', '自搭 '+yen(TENT.ybb.options[0].night)+'／營主搭 '+yen(TENT.ybb.options[1].night)],
+    ['遊戲草地 A／B／C', '自搭 '+yen(TENT.cd_a.options[0].night)+'／營主搭 '+yen(TENT.cd_a.options[1].night)],
+  ];
   app().innerHTML=`
    <div class="step">
      <span class="stepno">步驟 3 / 6</span>
      <h2>是否夜衝？</h2>
      <p class="sub">夜衝＝提前一晚入住，另加帳篷夜衝費用與一天保險。</p>
+     <div class="notice">
+       <b>各帳型夜衝加價（每帳）</b>
+       <ul>${NL.map(([n,v])=>`<li>${n}：<b>${v}</b></li>`).join('')}</ul>
+       另加一天平安保險（大人 $30／小孩 $21）。
+     </div>
      <div class="choices">
        ${radio('nr','夜衝','否','否，正常時段入住（12/19 中午報到）',state.nightRush==='否')}
        ${radio('nr','夜衝','是','是，要提前一晚夜衝（費用另計）',state.nightRush==='是')}
