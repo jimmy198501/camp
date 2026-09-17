@@ -316,9 +316,9 @@ const state={
 
 /* ═══════════ 步驟流程 ═══════════ */
 // 動態步驟序列（依「是否已滿4人」切換第5步）
-const STEP_INTRO=0, STEP_CONTACT=1, STEP_MATES=2, STEP_NIGHT=3, STEP_FULL=4, STEP_TENT=5, STEP_WISH=5, STEP_INS=6, STEP_REVIEW=7, STEP_DONE=8;
+const STEP_INTRO=0, STEP_FULL=1, STEP_TENT=2, STEP_WISH=2, STEP_NIGHT=3, STEP_CONTACT=4, STEP_MATES=5, STEP_INS=6, STEP_REVIEW=7, STEP_DONE=8;
 let currentStep=0;
-function steps(){ return ['說明','聯絡人','同行','夜衝','人數','選帳','需知','確認']; }
+function steps(){ return ['說明','人數','選帳','夜衝','聯絡人','同行','保險','確認']; }
 
 function setProg(){
   const names=steps(); const p=document.getElementById('prog'); p.innerHTML='';
@@ -333,9 +333,9 @@ const app=()=>document.getElementById('app');
 
 function render(){
   setProg(); window.scrollTo({top:0,behavior:'smooth'});
-  const fns=[rIntro,rContact,rMates,rNight,rFull,rTent,rIns,rReview,rDone];
+  const fns=[rIntro,rFull,rTent,rNight,rContact,rMates,rIns,rReview,rDone];
   // 第5步依 full 決定 選帳 或 志願
-  if(currentStep===5){ (state.full==='已滿'?rTent:rWish)(); return; }
+  if(currentStep===2){ (state.full==='已滿'?rTent:rWish)(); return; }
   fns[currentStep]();
 }
 
@@ -364,7 +364,7 @@ function rIntro(){
        </ul>
      </div>
    </div>`;
-  nav(null,()=>{currentStep=STEP_CONTACT;render();},'開始報名 →');
+  nav(null,()=>{currentStep=STEP_FULL;render();},'開始報名 →');
 }
 
 function personFields(prefix,obj,opts={}){
@@ -420,13 +420,13 @@ function onBed(prefix){
 function rContact(){
   app().innerHTML=`
    <div class="step">
-     <span class="stepno">步驟 1 / 6</span>
+     <span class="stepno">步驟 4 / 6</span>
      <h2>主要聯絡人</h2>
      <p class="sub">本帳的第一位（付費大人）。之後所有通知會寄到這個 Email。</p>
      ${personFields('c',state.contact,{email:true,phone:true})}
    </div>`;
   bindIdWarn('c');
-  nav(STEP_INTRO,saveContact,'繼續');
+  nav(STEP_NIGHT,saveContact,'繼續');
 }
 function saveContact(){
   const c=state.contact;
@@ -447,7 +447,7 @@ function saveContact(){
 function rMates(){
   let html=`
    <div class="step">
-     <span class="stepno">步驟 2 / 6</span>
+     <span class="stepno">步驟 5 / 6</span>
      <h2>同行者資料</h2>
      <p class="sub">最多可再填 4 位（含小孩）。每位都要收保險資料。</p>
      <div id="mateList"></div>
@@ -487,7 +487,7 @@ function saveMates(){
     if(isUnder15(m.birth)) ok=req('m'+i+'_guardian',!!m.guardian)&&ok;
   });
   if(!ok){ toast('同行者資料未填完整'); return; }
-  currentStep=STEP_NIGHT; render();
+  currentStep=STEP_INS; render();
 }
 
 function rNight(){
@@ -516,13 +516,13 @@ function rNight(){
      </div>
    </div>`;
   bindChoice('nr',v=>state.nightRush=v);
-  nav(STEP_MATES,()=>{ if(!state.nightRush){toast('請選擇是否夜衝');return;} currentStep=STEP_FULL; render(); });
+  nav(STEP_TENT,()=>{ if(!state.nightRush){toast('請選擇是否夜衝');return;} currentStep=STEP_CONTACT; render(); });
 }
 
 function rFull(){
   app().innerHTML=`
    <div class="step">
-     <span class="stepno">步驟 4 / 6</span>
+     <span class="stepno">步驟 1 / 6</span>
      <h2>帳位人數確認</h2>
      <p class="sub">本次報名是否已湊滿 4 人一帳？</p>
      <div class="choices">
@@ -531,7 +531,7 @@ function rFull(){
      </div>
    </div>`;
   bindChoice('fl',v=>state.full=v);
-  nav(STEP_NIGHT,()=>{ if(!state.full){toast('請選擇帳位人數');return;} currentStep=5; render(); });
+  nav(STEP_INTRO,()=>{ if(!state.full){toast('請選擇帳位人數');return;} currentStep=STEP_TENT; render(); });
 }
 
 /* ── 選帳（已滿4人）── */
@@ -566,7 +566,7 @@ function tentCard(t,selId,onPick,idPrefix){
 function rTent(){
   app().innerHTML=`
    <div class="step">
-     <span class="stepno">步驟 5 / 6　（已滿 4 人・選帳）</span>
+     <span class="stepno">步驟 2 / 6　（已滿 4 人・選帳）</span>
      <h2>選擇帳篷</h2>
      <p class="sub">數量有限、額滿為止。草地與營本部請再選自搭／營主搭。</p>
      <div class="tents" id="tentGrid"></div>
@@ -591,7 +591,7 @@ function saveTent(){
   if(!state.tent.id){ toast('請選擇帳篷'); return; }
   if(remaining(state.tent.id)<=0){ toast('此帳已額滿，請改選其他帳'); renderStock(); return; }
   if(TENT[state.tent.id].options && !state.tent.opt){ toast('請選擇自搭帳或營主搭帳'); return; }
-  currentStep=STEP_INS; render();
+  currentStep=STEP_NIGHT; render();
 }
 
 /* ── 志願（未滿4人）── */
@@ -615,7 +615,7 @@ function rWish(){
   }
   app().innerHTML=`
    <div class="step">
-     <span class="stepno">步驟 5 / 6　（未滿 4 人・填志願）</span>
+     <span class="stepno">步驟 2 / 6　（未滿 4 人・填志願）</span>
      <h2>帳篷志願</h2>
      <p class="sub">主辦會依志願協助併帳／排帳，最終帳位以主辦回覆為準。</p>
      ${blocks}
@@ -639,7 +639,7 @@ function saveWish(){
   if(!state.wishes[0].id){ toast('請至少填第一志願'); return; }
   const t0=TENT[state.wishes[0].id];
   if(t0.options && !state.wishes[0].opt){ toast('第一志願請選自搭／營主搭'); return; }
-  currentStep=STEP_INS; render();
+  currentStep=STEP_NIGHT; render();
 }
 
 /* ── 保險需知 ── */
@@ -664,7 +664,7 @@ function rIns(){
        <span>我已確認上方所有參加人員（主報名者與同行者）之投保資料正確無誤，並同意繳交上述保險費用。</span></label>
    </div>`;
   document.getElementById('ackBox').onchange=e=>state.ack=e.target.checked;
-  nav(5,()=>{ if(!state.ack){toast('請先勾選同意保險需知');return;} currentStep=STEP_REVIEW; render(); });
+  nav(STEP_MATES,()=>{ if(!state.ack){toast('請先勾選同意保險需知');return;} currentStep=STEP_REVIEW; render(); });
 }
 
 /* ── 確認與送出 ── */
@@ -731,7 +731,7 @@ async function submit(){
     state.done={id:regId}; currentStep=STEP_DONE; render();
   }catch(e){
     btn.disabled=false; btn.textContent='送出報名';
-    if(e && e.code==='FULL'){ toast('抱歉，這頂帳剛剛被選走了，請改選其他帳'); currentStep=5; render(); }
+    if(e && e.code==='FULL'){ toast('抱歉，這頂帳剛剛被選走了，請改選其他帳'); currentStep=STEP_TENT; render(); }
     else{ console.error(e); toast('送出失敗，請稍後再試'); }
   }
 }
