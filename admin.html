@@ -80,6 +80,21 @@ details table{margin-top:8px;font-size:12.5px}
 .toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%);background:var(--sky);color:#fff;padding:11px 18px;border-radius:10px;font-size:14px;box-shadow:var(--shadow);opacity:0;transition:.25s;z-index:99;pointer-events:none}
 .toast.show{opacity:1}
 .note{font-size:12.5px;color:var(--soft);margin-top:8px}
+.modal{position:fixed;inset:0;background:rgba(20,30,45,.55);display:flex;align-items:flex-start;justify-content:center;padding:16px;z-index:80;overflow:auto}
+.modal.hidden{display:none}
+.modalbox{background:#fff;border-radius:14px;max-width:560px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.3);margin:auto}
+.modalbox h3{margin:0;padding:15px 18px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;font-size:16px}
+.modalbox .x{background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:var(--soft)}
+#editBody{padding:14px 18px;max-height:66vh;overflow:auto}
+.ed-sec{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.ed-sec h4{margin:0 0 6px;font-size:14px}
+.ed-l{display:block;font-size:12.5px;color:var(--soft);margin:8px 0 3px}
+#editBody input,#editBody select,#editBody textarea{width:100%;font:inherit;border:1.5px solid var(--line);border-radius:8px;padding:8px 10px}
+#editBody input[type=radio]{width:auto;margin-right:4px}
+#editBody .radio{display:inline-block;margin-right:16px;font-size:14px}
+.ed-mate{border:1px dashed var(--line);border-radius:8px;padding:10px;margin-bottom:8px}
+.ed-mate-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;margin-bottom:2px}
+.modalfoot{padding:13px 18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
 </style>
 </head>
 <body>
@@ -131,6 +146,17 @@ details table{margin-top:8px;font-size:12.5px}
         </span>
       </h3>
       <div class="scroll"><table id="regTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<div id="editModal" class="modal hidden">
+  <div class="modalbox">
+    <h3><span>編輯報名</span><button class="x" onclick="closeEdit()">&times;</button></h3>
+    <div id="editBody"></div>
+    <div class="modalfoot">
+      <button class="btn ghost" onclick="closeEdit()">取消</button>
+      <button class="btn primary" id="saveEditBtn" onclick="saveEdit()">儲存修改</button>
     </div>
   </div>
 </div>
@@ -196,15 +222,45 @@ function peopleOf(r){
   return arr;
 }
 
+/* ── 費用計算 ── */
+const TENT_FEE={
+  mengguba:{price:3500,night:1750}, caixia:{price:4500,night:2250}, wenxin:{price:4500,night:2250},
+  bft_a:{price:4000,night:2000}, bft_b:{price:4000,night:2000}, bft_c:{price:4000,night:2000}, bft_d:{price:4000,night:2000},
+  ybb:{opts:{self:{price:2200,night:1100},host:{price:2700,night:1350}}},
+  cd_a:{opts:{self:{price:1200,night:600},host:{price:2200,night:600}}},
+  cd_b:{opts:{self:{price:1200,night:600},host:{price:2200,night:600}}},
+  cd_c:{opts:{self:{price:1200,night:600},host:{price:2200,night:600}}}
+};
+function tentFeeOf(r){
+  if(r.full!=='已滿'||!r.tent||!r.tent.id) return null;
+  const f=TENT_FEE[r.tent.id]; if(!f) return null;
+  let base,night;
+  if(f.opts){ const o=f.opts[r.tent.opt]; if(!o) return null; base=o.price; night=o.night; }
+  else { base=f.price; night=f.night; }
+  return base + (r.nightRush==='是'?night:0);
+}
+function insFeeOf(r){
+  const days=r.nightRush==='是'?2:1; let s=0;
+  peopleOf(r).forEach(p=>{ s+= under15(p.birth)?21:30; });
+  return s*days;
+}
+function feeOf(r){ const t=tentFeeOf(r); const ins=insFeeOf(r); return {tent:t, ins:ins, total:(t===null?null:t+ins), pending:t===null}; }
+function money(n){ return '$'+Number(n).toLocaleString(); }
+
 /* ── 統計卡 ── */
 function renderAll(){
   document.getElementById('regCount').textContent=REGS.length;
-  let people=0, kids=0, full=0, wish=0;
+  let people=0, kids=0, full=0, wish=0, paidCnt=0, dueKnown=0;
   REGS.forEach(r=>{ const ppl=peopleOf(r); people+=ppl.length; kids+=ppl.filter(p=>under15(p.birth)).length;
-    if(r.full==='已滿')full++; else wish++; });
+    if(r.full==='已滿')full++; else wish++;
+    if(r.paid)paidCnt++;
+    const f=feeOf(r); if(f.total!==null) dueKnown+=f.total;
+  });
   const cards=[
     ['報名筆數',REGS.length],['總人數',people],
-    ['已滿4人 / 未滿4人', full+' / '+wish],['其中未滿15歲',kids]
+    ['已滿 / 未滿', full+' / '+wish],['未滿15歲',kids],
+    ['已收 / 未收', paidCnt+' / '+(REGS.length-paidCnt)],
+    ['應收合計（已定帳）', money(dueKnown)]
   ];
   document.getElementById('stats').innerHTML=cards.map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
   renderRegs();
@@ -241,20 +297,41 @@ function renderRegs(){
   const rows=REGS.map(r=>{
     const c=r.contact||{}; const ppl=peopleOf(r);
     const detail=ppl.map(p=>`<tr><td>${p.role}</td><td>${esc(p.name)}</td><td>${esc(p.birth)}</td><td>${esc(p.id)}</td><td>${esc(p.diet||'')}</td><td>${under15(p.birth)?'未滿15':'—'}</td><td>${esc(p.guardian||'')}</td><td>${esc(p.bed||'佔床')}</td></tr>`).join('');
+    const f=feeOf(r);
+    const feeCell = f.pending
+      ? `保險 ${money(f.ins)}<div class="note">帳篷待定</div>`
+      : `<b>${money(f.total)}</b><div class="note">帳 ${money(f.tent)}＋保 ${money(f.ins)}</div>`;
+    const paidCell = r.paid
+      ? `<button class="btn pine mini" onclick="togglePaid('${r._id}')">已收 ✓</button><div class="note">${esc(r.paidBy||'')}${r.paidAt?'<br>'+fmtTime(r.paidAt):''}</div>`
+      : `<button class="btn ghost mini" onclick="togglePaid('${r._id}')">未收</button>`;
     return `<tr>
       <td>${fmtTime(r.createdAt)}</td>
       <td><b>${esc(c.name)}</b><div class="mini-people">${esc(c.phone||'')}<br>${esc(c.email||'')}</div></td>
       <td>${ppl.length} 人${r.nightRush==='是'?'<br><span class="tag wish">夜衝</span>':''}</td>
       <td>${r.full==='已滿'?'<span class="tag full">已滿</span>':'<span class="tag wish">未滿</span>'}<br>${esc(tentText(r))}</td>
+      <td>${feeCell}</td>
       <td><details><summary>展開 ${ppl.length} 人保險資料</summary>
         <table><thead><tr><th>身份</th><th>姓名</th><th>生日</th><th>身分證</th><th>飲食</th><th>未滿15</th><th>監護人</th><th>床位</th></tr></thead><tbody>${detail}</tbody></table>
         ${r.mergeNote?`<div class="note">併帳備註：${esc(r.mergeNote)}</div>`:''}
       </details></td>
-      <td><button class="btn danger mini" onclick="delReg('${r._id}')">刪除</button></td>
+      <td>${paidCell}</td>
+      <td><button class="btn ghost mini" onclick="openEdit('${r._id}')">編輯</button> <button class="btn danger mini" onclick="delReg('${r._id}')">刪除</button></td>
     </tr>`;
   }).join('');
   document.getElementById('regTable').innerHTML=
-    `<thead><tr><th>時間</th><th>主報名人</th><th>人數</th><th>帳篷</th><th>參加人員</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+    `<thead><tr><th>時間</th><th>主報名人</th><th>人數</th><th>帳篷</th><th>費用</th><th>參加人員</th><th>收費</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+/* ── 收費狀態切換 ── */
+async function togglePaid(id){
+  const r=REGS.find(x=>x._id===id); if(!r) return;
+  try{
+    if(r.paid){
+      await db.collection('registrations').doc(id).update({paid:false, paidBy:'', paidAt:null});
+    }else{
+      await db.collection('registrations').doc(id).update({paid:true, paidBy:(auth.currentUser&&auth.currentUser.email)||'', paidAt:firebase.firestore.FieldValue.serverTimestamp()});
+    }
+  }catch(e){ console.error(e); toast('更新收費狀態失敗：'+(e.code||e.message)); }
 }
 
 /* ── 刪除單筆（已滿的同時把該帳位 -1） ── */
@@ -299,7 +376,13 @@ document.getElementById('exportBtn').onclick=()=>{
       '主報名人':c.name||'', '電話':c.phone||'', 'Email':c.email||'',
       '總人數':ppl.length, '夜衝':r.nightRush||'',
       '人數確認':r.full==='已滿'?'已滿4人':'未滿4人',
-      '帳篷/志願':tentText(r), '併帳備註':r.mergeNote||''
+      '帳篷/志願':tentText(r), '併帳備註':r.mergeNote||'',
+      '帳篷費': feeOf(r).pending?'待定':feeOf(r).tent,
+      '保險費': feeOf(r).ins,
+      '應付總額': feeOf(r).pending?'(帳篷待定)':feeOf(r).total,
+      '收費狀態': r.paid?'已收':'未收',
+      '收費人': r.paidBy||'',
+      '收費時間': r.paidAt?fmtTime(r.paidAt):''
     };
   });
   // 分頁2：保險名冊（一列一人）
@@ -320,6 +403,125 @@ document.getElementById('exportBtn').onclick=()=>{
   XLSX.writeFile(wb, `露營報名_${stamp}.xlsx`);
   toast('已匯出 Excel');
 };
+
+/* ═══════════ 編輯報名（管理者） ═══════════ */
+const TENT_NAME={mengguba:'蒙古包',caixia:'彩霞帳',wenxin:'溫馨帳',bft_a:'避風塘A',bft_b:'避風塘B',bft_c:'避風塘C',bft_d:'避風塘D',ybb:'營本部便利露',cd_a:'遊戲草地A',cd_b:'遊戲草地B',cd_c:'遊戲草地C'};
+const TENT_OPTS={ybb:[['self','自搭帳'],['host','營主搭帳']],cd_a:[['self','自搭帳'],['host','營主搭帳']],cd_b:[['self','自搭帳'],['host','營主搭帳']],cd_c:[['self','自搭帳'],['host','營主搭帳']]};
+function remain(id){const t=TENTS_LIVE[id]||{};return (t.total||0)-(t.taken||0);}
+function tentLabelOf(id,opt){const nm=TENT_NAME[id]||id;if(TENT_OPTS[id]&&opt){const o=TENT_OPTS[id].find(x=>x[0]===opt);return nm+'・'+(o?o[1]:'');}return nm;}
+function eg(id){const e=document.getElementById(id);return e?e.value.trim():'';}
+
+let EDIT_ID=null, EDIT=null;
+function openEdit(id){
+  const r=REGS.find(x=>x._id===id); if(!r)return;
+  EDIT_ID=id; EDIT=JSON.parse(JSON.stringify(r));
+  if(!Array.isArray(EDIT.mates))EDIT.mates=[]; if(!Array.isArray(EDIT.wishes))EDIT.wishes=[];
+  if(!EDIT.contact)EDIT.contact={};
+  renderEditBody();
+  document.getElementById('editModal').classList.remove('hidden');
+}
+function closeEdit(){document.getElementById('editModal').classList.add('hidden');EDIT=null;EDIT_ID=null;}
+
+function personInputs(prefix,obj,isMate){
+  return `
+    <label class="ed-l">姓名</label><input id="${prefix}_name" value="${esc(obj.name||'')}">
+    ${isMate?'':`<label class="ed-l">Email</label><input id="${prefix}_email" value="${esc(obj.email||'')}">`}
+    <label class="ed-l">電話</label><input id="${prefix}_phone" value="${esc(obj.phone||'')}">
+    <label class="ed-l">生日</label><input type="date" id="${prefix}_birth" value="${esc(obj.birth||'')}">
+    <label class="ed-l">身分證</label><input id="${prefix}_id" value="${esc(obj.id||'')}">
+    <label class="ed-l">飲食</label><select id="${prefix}_diet"><option ${obj.diet==='葷食'?'selected':''}>葷食</option><option ${obj.diet==='素食'?'selected':''}>素食</option></select>
+    ${isMate?`<label class="ed-l">床位</label><select id="${prefix}_bed"><option ${obj.bed!=='不佔床'?'selected':''}>佔床</option><option ${obj.bed==='不佔床'?'selected':''}>不佔床</option></select>`:''}
+    <label class="ed-l">監護人（未滿15歲才填）</label><input id="${prefix}_guardian" value="${esc(obj.guardian||'')}">`;
+}
+function tentOptHtml(selId,tentId,opt){
+  if(!TENT_OPTS[tentId])return '';
+  return `<label class="ed-l">自搭／營主搭</label><select id="${selId}"><option value="">請選擇…</option>${TENT_OPTS[tentId].map(o=>`<option value="${o[0]}" ${opt===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select>`;
+}
+function tentSectionHtml(){
+  const cur=(EDIT.tent&&EDIT.tent.id)||''; const curOpt=(EDIT.tent&&EDIT.tent.opt)||'';
+  const opts=TENT_ORDER.map(id=>`<option value="${id}" ${cur===id?'selected':''}>${TENT_NAME[id]}（剩 ${remain(id)}${cur===id?'，含本筆':''}）</option>`).join('');
+  return `<h4>帳篷（已滿4人）</h4><label class="ed-l">帳型</label>
+    <select id="e_tent" onchange="onEditTentChange()"><option value="">— 選帳 —</option>${opts}</select>
+    <div id="e_tentopt_wrap">${tentOptHtml('e_tentopt',cur,curOpt)}</div>`;
+}
+function wishSectionHtml(){
+  const W=EDIT.wishes||[]; let h='<h4>帳篷志願（未滿4人）</h4>';
+  for(let i=0;i<3;i++){ const w=W[i]||{};
+    h+=`<label class="ed-l">第 ${i+1} 志願</label>
+      <select id="e_w${i}" onchange="onEditWish(${i})"><option value="">—</option>${TENT_ORDER.map(id=>`<option value="${id}" ${w.id===id?'selected':''}>${TENT_NAME[id]}</option>`).join('')}</select>
+      <div id="e_w${i}opt_wrap">${tentOptHtml('e_w'+i+'opt',w.id,w.opt)}</div>`;
+  }
+  h+=`<label class="ed-l">併帳備註</label><textarea id="e_merge">${esc(EDIT.mergeNote||'')}</textarea>`;
+  return h;
+}
+function renderEditBody(){
+  const c=EDIT.contact||{};
+  let html=`<div class="ed-sec"><h4>主報名人</h4>${personInputs('e_c',c,false)}</div>`;
+  html+=`<div class="ed-sec"><h4>同行者</h4><div id="e_mates">`;
+  (EDIT.mates||[]).forEach((m,i)=>{ html+=`<div class="ed-mate"><div class="ed-mate-h"><span>同行者 ${i+1}</span><button type="button" class="btn danger mini" onclick="delEditMate(${i})">刪除此人</button></div>${personInputs('e_m'+i,m,true)}</div>`; });
+  html+=`</div><button type="button" class="btn ghost mini" onclick="addEditMate()">＋ 新增同行者</button></div>`;
+  html+=`<div class="ed-sec"><h4>其他</h4>
+    <label class="ed-l">夜衝</label>
+    <label class="radio"><input type="radio" name="e_night" value="否" ${EDIT.nightRush!=='是'?'checked':''}>否</label>
+    <label class="radio"><input type="radio" name="e_night" value="是" ${EDIT.nightRush==='是'?'checked':''}>是</label>
+    <label class="ed-l">人數確認</label>
+    <label class="radio"><input type="radio" name="e_full" value="已滿" ${EDIT.full==='已滿'?'checked':''} onchange="onEditFull()">已滿4人</label>
+    <label class="radio"><input type="radio" name="e_full" value="未滿" ${EDIT.full==='未滿'?'checked':''} onchange="onEditFull()">未滿4人</label>
+  </div>`;
+  html+=`<div class="ed-sec" id="e_tentSec">${tentSectionHtml()}</div>`;
+  html+=`<div class="ed-sec" id="e_wishSec">${wishSectionHtml()}</div>`;
+  document.getElementById('editBody').innerHTML=html;
+  onEditFull();
+}
+function onEditFull(){
+  const fl=document.querySelector('input[name=e_full]:checked'); const v=fl?fl.value:EDIT.full;
+  document.getElementById('e_tentSec').style.display = v==='已滿'?'block':'none';
+  document.getElementById('e_wishSec').style.display = v==='未滿'?'block':'none';
+}
+function onEditTentChange(){ document.getElementById('e_tentopt_wrap').innerHTML=tentOptHtml('e_tentopt',eg('e_tent'),''); }
+function onEditWish(i){ document.getElementById('e_w'+i+'opt_wrap').innerHTML=tentOptHtml('e_w'+i+'opt',eg('e_w'+i),''); }
+function captureEdit(){
+  EDIT.contact={...EDIT.contact,name:eg('e_c_name'),email:eg('e_c_email'),phone:eg('e_c_phone'),birth:eg('e_c_birth'),id:eg('e_c_id'),diet:eg('e_c_diet'),guardian:eg('e_c_guardian')};
+  EDIT.mates=(EDIT.mates||[]).map((m,i)=>({...m,name:eg('e_m'+i+'_name'),phone:eg('e_m'+i+'_phone'),birth:eg('e_m'+i+'_birth'),id:eg('e_m'+i+'_id'),diet:eg('e_m'+i+'_diet'),bed:eg('e_m'+i+'_bed')||'佔床',guardian:eg('e_m'+i+'_guardian')}));
+  const nr=document.querySelector('input[name=e_night]:checked'); if(nr)EDIT.nightRush=nr.value;
+  const fl=document.querySelector('input[name=e_full]:checked'); if(fl)EDIT.full=fl.value;
+  if(EDIT.full==='已滿'){ const tid=eg('e_tent'); EDIT.tent=tid?{id:tid,opt:(TENT_OPTS[tid]?eg('e_tentopt'):null),label:tentLabelOf(tid,TENT_OPTS[tid]?eg('e_tentopt'):null)}:null; }
+  else { EDIT.wishes=[0,1,2].map(i=>{const id=eg('e_w'+i);if(!id)return null;const opt=TENT_OPTS[id]?eg('e_w'+i+'opt'):null;return {id,opt,label:tentLabelOf(id,opt)};}).filter(Boolean); EDIT.mergeNote=eg('e_merge'); }
+}
+function addEditMate(){ captureEdit(); EDIT.mates.push({name:'',phone:'',birth:'',id:'',diet:'葷食',bed:'佔床',guardian:''}); renderEditBody(); }
+function delEditMate(i){ captureEdit(); EDIT.mates.splice(i,1); renderEditBody(); }
+
+async function saveEdit(){
+  captureEdit();
+  if(!EDIT.contact.name){ toast('主報名人姓名必填'); return; }
+  if(EDIT.full==='已滿'){
+    if(!(EDIT.tent&&EDIT.tent.id)){ toast('請選擇帳篷'); return; }
+    if(TENT_OPTS[EDIT.tent.id]&&!EDIT.tent.opt){ toast('請選自搭／營主搭'); return; }
+  }
+  const r=REGS.find(x=>x._id===EDIT_ID);
+  const oldTentId=(r.full==='已滿'&&r.tent)?r.tent.id:null;
+  const newTentId=(EDIT.full==='已滿'&&EDIT.tent)?EDIT.tent.id:null;
+  if(newTentId && newTentId!==oldTentId && remain(newTentId)<=0){ if(!confirm('此帳目前已額滿，仍要移入？（會造成超額）'))return; }
+  const payload={ contact:EDIT.contact, mates:EDIT.mates, nightRush:EDIT.nightRush, full:EDIT.full,
+    tent: EDIT.full==='已滿'?EDIT.tent:null, wishes: EDIT.full==='未滿'?(EDIT.wishes||[]):null, mergeNote:EDIT.mergeNote||'' };
+  const btn=document.getElementById('saveEditBtn'); if(btn)btn.disabled=true;
+  try{
+    if((oldTentId||null)!==(newTentId||null)){
+      await db.runTransaction(async tx=>{
+        let oldRef,newRef,oldSnap,newSnap;
+        if(oldTentId){oldRef=db.collection('tents').doc(oldTentId);oldSnap=await tx.get(oldRef);}
+        if(newTentId){newRef=db.collection('tents').doc(newTentId);newSnap=await tx.get(newRef);}
+        if(oldTentId){const cc=((oldSnap.data()||{}).taken)||0;tx.update(oldRef,{taken:Math.max(0,cc-1)});}
+        if(newTentId){const cc=((newSnap.data()||{}).taken)||0;tx.update(newRef,{taken:cc+1});}
+        tx.update(db.collection('registrations').doc(EDIT_ID),payload);
+      });
+    } else {
+      await db.collection('registrations').doc(EDIT_ID).update(payload);
+    }
+    closeEdit(); toast('已儲存修改');
+  }catch(e){ console.error(e); toast('儲存失敗：'+(e.code||e.message)); }
+  finally{ if(btn)btn.disabled=false; }
+}
 
 function esc(s){return (s==null?'':(''+s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600);}
