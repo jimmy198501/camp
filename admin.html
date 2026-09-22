@@ -95,6 +95,9 @@ details table{margin-top:8px;font-size:12.5px}
 .ed-mate{border:1px dashed var(--line);border-radius:8px;padding:10px;margin-bottom:8px}
 .ed-mate-h{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:13px;margin-bottom:2px}
 .modalfoot{padding:13px 18px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end}
+.gm{display:flex;gap:10px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;cursor:pointer;font-size:13.5px}
+.gm input{margin-top:3px;flex:none}
+.gm.dim{opacity:.5;cursor:not-allowed}
 </style>
 </head>
 <body>
@@ -139,6 +142,16 @@ details table{margin-top:8px;font-size:12.5px}
     </div>
 
     <div class="panel">
+      <h3>併帳群組（未滿4人）
+        <span class="tools">
+          <button class="btn pine mini" id="newGroupBtn" onclick="openGroup(null)">＋ 新增併帳群組</button>
+        </span>
+      </h3>
+      <div class="scroll"><table id="groupTable"></table></div>
+      <div class="note">把數筆「未滿4人」的報名併成一頂帳：只佔 1 頂帳位，帳篷費依各筆佔床人數分攤，每筆總額＝分攤帳費＋自己的保險費。</div>
+    </div>
+
+    <div class="panel">
       <h3>報名清單（<span id="regCount">0</span>）
         <span class="tools">
           <button class="btn ghost mini" id="refreshBtn">重新整理</button>
@@ -146,6 +159,17 @@ details table{margin-top:8px;font-size:12.5px}
         </span>
       </h3>
       <div class="scroll"><table id="regTable"></table></div>
+    </div>
+  </div>
+</div>
+
+<div id="groupModal" class="modal hidden">
+  <div class="modalbox">
+    <h3><span id="groupTitle">新增併帳群組</span><button class="x" onclick="closeGroup()">&times;</button></h3>
+    <div id="groupBody"></div>
+    <div class="modalfoot">
+      <button class="btn ghost" onclick="closeGroup()">取消</button>
+      <button class="btn primary" id="saveGroupBtn" onclick="saveGroup()">儲存群組</button>
     </div>
   </div>
 </div>
@@ -171,7 +195,7 @@ details table{margin-top:8px;font-size:12.5px}
 firebase.initializeApp(FIREBASE_CONFIG);
 const auth=firebase.auth(); const db=firebase.firestore();
 
-let REGS=[]; let TENTS_LIVE={}; let unsubR=null, unsubT=null;
+let REGS=[]; let TENTS_LIVE={}; let unsubR=null, unsubT=null, unsubG=null;
 
 /* ── 登入 ── */
 document.getElementById('loginBtn').onclick=doLogin;
@@ -196,7 +220,7 @@ auth.onAuthStateChanged(u=>{
   }else{
     document.getElementById('adminView').classList.add('hidden');
     document.getElementById('loginView').classList.remove('hidden');
-    if(unsubR)unsubR(); if(unsubT)unsubT();
+    if(unsubR)unsubR(); if(unsubT)unsubT(); if(unsubG)unsubG();
   }
 });
 
@@ -208,9 +232,9 @@ function start(){
   unsubR=db.collection('registrations').orderBy('createdAt','desc').onSnapshot(s=>{
     REGS=s.docs.map(d=>({_id:d.id,...d.data()})); renderAll();
   }, err=>{
-    // 若沒建 index，orderBy 可能失敗，改用不排序
     db.collection('registrations').onSnapshot(s2=>{ REGS=s2.docs.map(d=>({_id:d.id,...d.data()})); renderAll(); });
   });
+  unsubG=db.collection('groups').onSnapshot(s=>{ GROUPS={}; s.forEach(d=>GROUPS[d.id]=d.data()); renderAll(); }, err=>console.error(err));
 }
 document.getElementById('refreshBtn').onclick=()=>{ if(auth.currentUser){ toast('已是即時更新'); } };
 
@@ -244,7 +268,17 @@ function insFeeOf(r){
   peopleOf(r).forEach(p=>{ s+= under15(p.birth)?21:30; });
   return s*days;
 }
-function feeOf(r){ const t=tentFeeOf(r); const ins=insFeeOf(r); return {tent:t, ins:ins, total:(t===null?null:t+ins), pending:t===null}; }
+function feeOf(r){
+  const g=groupOf(r);
+  const nightRush = g? g.nightRush : r.nightRush;
+  let tent=null, pending=false;
+  if(g){ tent=memberShare(r,g); }
+  else if(r.full==='已滿' && r.tent && r.tent.id){ tent=tentFeeOf(r); }
+  else { pending=true; }
+  const days = nightRush==='是'?2:1;
+  let ins=0; peopleOf(r).forEach(p=>ins += under15(p.birth)?21:30); ins*=days;
+  return { tent: pending?null:tent, ins:ins, total: pending?null:(tent+ins), pending:pending, grouped:!!g };
+}
 function money(n){ return '$'+Number(n).toLocaleString(); }
 
 /* ── 統計卡 ── */
@@ -264,6 +298,7 @@ function renderAll(){
   ];
   document.getElementById('stats').innerHTML=cards.map(([l,n])=>`<div class="stat"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
   renderRegs();
+  if(typeof renderGroups==='function') renderGroups();
 }
 
 /* ── 帳位庫存表 ── */
@@ -288,6 +323,8 @@ function fmtTime(ts){
   }catch(e){ return '—'; }
 }
 function tentText(r){
+  const g=groupOf(r);
+  if(g) return tentLabelG(g.tentId,g.tentOpt)+'（併帳）';
   if(r.full==='已滿') return (r.tent&&r.tent.label)||'—';
   const w=(r.wishes||[]).map((x,i)=>`${i+1}.${x.label||x.id}`).join('、');
   return w||'—';
@@ -339,6 +376,12 @@ async function delReg(id){
   const r=REGS.find(x=>x._id===id); if(!r)return;
   if(!confirm(`確定刪除「${(r.contact&&r.contact.name)||'此筆'}」的報名？`+(r.full==='已滿'?'\n（會把該帳位釋放 -1）':''))) return;
   try{
+    if(r.groupId && GROUPS[r.groupId]){
+      const g=GROUPS[r.groupId];
+      await db.collection('groups').doc(r.groupId).update({members:(g.members||[]).filter(x=>x!==id)});
+      await db.collection('registrations').doc(id).delete();
+      toast('已刪除'); return;
+    }
     if(r.full==='已滿' && r.tent && r.tent.id){
       const tref=db.collection('tents').doc(r.tent.id);
       await db.runTransaction(async tx=>{
@@ -358,6 +401,7 @@ document.getElementById('recalcBtn').onclick=async ()=>{
   if(!confirm('依目前所有「已滿4人」報名，重新計算每個帳型的已用數量？')) return;
   const count={};
   REGS.forEach(r=>{ if(r.full==='已滿' && r.tent && r.tent.id){ count[r.tent.id]=(count[r.tent.id]||0)+1; } });
+  Object.values(GROUPS).forEach(g=>{ if(g.tentId){ count[g.tentId]=(count[g.tentId]||0)+1; } });
   try{
     const batch=db.batch();
     TENT_ORDER.forEach(id=>{ if(TENTS_LIVE[id]) batch.update(db.collection('tents').doc(id),{taken:count[id]||0}); });
@@ -521,6 +565,134 @@ async function saveEdit(){
     closeEdit(); toast('已儲存修改');
   }catch(e){ console.error(e); toast('儲存失敗：'+(e.code||e.message)); }
   finally{ if(btn)btn.disabled=false; }
+}
+
+/* ═══════════ 併帳群組 ═══════════ */
+let GROUPS={};                 // groupId -> {tentId,tentOpt,nightRush,members:[regId...]}
+function bedsOf(r){ return peopleOf(r).filter(p=>p.bed!=='不佔床').length; }
+function groupOf(r){ return r.groupId && GROUPS[r.groupId] ? GROUPS[r.groupId] : null; }
+function groupTentFee(g){
+  const f=TENT_FEE[g.tentId]; if(!f) return 0;
+  let base,night;
+  if(f.opts){ const o=f.opts[g.tentOpt]; base=o?o.price:0; night=o?o.night:0; }
+  else { base=f.price; night=f.night; }
+  return base + (g.nightRush==='是'?night:0);
+}
+function groupMembers(g){ return (g.members||[]).map(id=>REGS.find(x=>x._id===id)).filter(Boolean); }
+function memberShare(r,g){
+  const mem=groupMembers(g);
+  const beds=mem.map(m=>bedsOf(m));
+  const totalBeds=beds.reduce((a,b)=>a+b,0) || mem.length || 1;
+  const fee=groupTentFee(g);
+  const shares=mem.map((m,i)=>Math.floor(fee*(bedsOf(m))/totalBeds));
+  let rem=fee-shares.reduce((a,b)=>a+b,0);
+  for(let i=0;i<rem;i++){ shares[i%shares.length]++; }
+  const idx=mem.findIndex(m=>m._id===r._id);
+  return idx>=0?shares[idx]:0;
+}
+function tentLabelG(id,opt){ const nm=TENT_NAME[id]||id; if(TENT_OPTS[id]&&opt){const o=TENT_OPTS[id].find(x=>x[0]===opt);return nm+'・'+(o?o[1]:'');} return nm; }
+
+/* 群組清單 */
+function renderGroups(){
+  const gArr=Object.entries(GROUPS);
+  if(!gArr.length){ document.getElementById('groupTable').innerHTML='<tbody><tr><td class=empty>尚無併帳群組</td></tr></tbody>'; return; }
+  const rows=gArr.map(([gid,g])=>{
+    const mem=groupMembers(g);
+    const beds=mem.reduce((s,m)=>s+bedsOf(m),0);
+    const memList=mem.map(m=>{ const nm=(m.contact&&m.contact.name)||'?'; return `${esc(nm)}（${peopleOf(m).length}人/佔床${bedsOf(m)}・分攤 ${money(memberShare(m,g))}）`; }).join('<br>');
+    return `<tr>
+      <td><b>${esc(tentLabelG(g.tentId,g.tentOpt))}</b>${g.nightRush==='是'?'<br><span class="tag wish">夜衝</span>':''}<div class="note">帳費 ${money(groupTentFee(g))}</div></td>
+      <td>${mem.length} 筆・佔床 ${beds} 人</td>
+      <td>${memList||'—'}</td>
+      <td><button class="btn ghost mini" onclick="openGroup('${gid}')">編輯</button> <button class="btn danger mini" onclick="delGroup('${gid}')">解散</button></td>
+    </tr>`;
+  }).join('');
+  document.getElementById('groupTable').innerHTML=
+    `<thead><tr><th>帳篷</th><th>人數</th><th>成員（分攤）</th><th></th></tr></thead><tbody>${rows}</tbody>`;
+}
+
+/* 群組彈窗 */
+let GID=null;
+function openGroup(gid){
+  GID=gid;
+  const g = gid? GROUPS[gid] : {tentId:'',tentOpt:'',nightRush:'否',members:[]};
+  document.getElementById('groupTitle').textContent = gid?'編輯併帳群組':'新增併帳群組';
+  // 可選成員：所有未滿4人；已在「其他群組」的標記不可選
+  const cand=REGS.filter(r=>r.full==='未滿');
+  const optTents=TENT_ORDER.map(id=>`<option value="${id}" ${g.tentId===id?'selected':''}>${TENT_NAME[id]}（剩 ${remain(id)}${(gid&&g.tentId===id)?'，含本群':''}）</option>`).join('');
+  const memRows=cand.map(r=>{
+    const inOther = r.groupId && r.groupId!==gid;
+    const checked = (g.members||[]).includes(r._id);
+    const nm=(r.contact&&r.contact.name)||'?';
+    const wish=(r.wishes||[]).map((x,i)=>`${i+1}.${TENT_NAME[x.id]||x.id}`).join('、');
+    return `<label class="gm ${inOther?'dim':''}">
+      <input type="checkbox" value="${r._id}" ${checked?'checked':''} ${inOther?'disabled':''}>
+      <span><b>${esc(nm)}</b>（${peopleOf(r).length}人/佔床${bedsOf(r)}）${inOther?'<span class="note">（已在其他群組）</span>':''}<div class="note">志願：${esc(wish)||'—'}${r.mergeNote?'｜備註：'+esc(r.mergeNote):''}</div></span>
+    </label>`;
+  }).join('');
+  document.getElementById('groupBody').innerHTML=`
+    <div class="ed-sec"><h4>帳篷</h4>
+      <label class="ed-l">帳型</label>
+      <select id="g_tent" onchange="onGroupTent()"><option value="">— 選帳 —</option>${optTents}</select>
+      <div id="g_optwrap">${TENT_OPTS[g.tentId]?tentOptHtml('g_opt',g.tentId,g.tentOpt):''}</div>
+      <label class="ed-l">夜衝（整頂帳）</label>
+      <label class="radio"><input type="radio" name="g_night" value="否" ${g.nightRush!=='是'?'checked':''}>否</label>
+      <label class="radio"><input type="radio" name="g_night" value="是" ${g.nightRush==='是'?'checked':''}>是</label>
+    </div>
+    <div class="ed-sec"><h4>選擇要併入的報名（未滿4人）</h4>
+      ${memRows||'<div class="note">目前沒有未滿4人的報名</div>'}
+    </div>`;
+  document.getElementById('groupModal').classList.remove('hidden');
+}
+function onGroupTent(){ document.getElementById('g_optwrap').innerHTML = TENT_OPTS[eg('g_tent')]? tentOptHtml('g_opt',eg('g_tent'),'') : ''; }
+function closeGroup(){ document.getElementById('groupModal').classList.add('hidden'); GID=null; }
+
+async function saveGroup(){
+  const tentId=eg('g_tent');
+  if(!tentId){ toast('請選擇帳篷'); return; }
+  if(TENT_OPTS[tentId] && !eg('g_opt')){ toast('請選自搭／營主搭'); return; }
+  const nr=document.querySelector('input[name=g_night]:checked'); const nightRush=nr?nr.value:'否';
+  const picked=[...document.querySelectorAll('#groupBody input[type=checkbox]:checked')].map(x=>x.value);
+  if(picked.length<1){ toast('請至少選 1 筆報名'); return; }
+  const old = GID? GROUPS[GID] : null;
+  const oldTentId = old? old.tentId : null;
+  const oldMembers = old? (old.members||[]) : [];
+  const newTentId = tentId;
+  // 佔用一頂帳（新群或換帳時）
+  const needNewTent = (oldTentId!==newTentId);
+  if(needNewTent && remain(newTentId)<=0){ if(!confirm('此帳目前已額滿，仍要指定給本群？（會超額）')) return; }
+  const groupData={ tentId:newTentId, tentOpt: TENT_OPTS[newTentId]?eg('g_opt'):'', nightRush, members:picked };
+  const added=picked.filter(id=>!oldMembers.includes(id));
+  const removed=oldMembers.filter(id=>!picked.includes(id));
+  const btn=document.getElementById('saveGroupBtn'); btn.disabled=true;
+  try{
+    await db.runTransaction(async tx=>{
+      let oldRef,newRef,oldSnap,newSnap;
+      if(needNewTent && oldTentId){ oldRef=db.collection('tents').doc(oldTentId); oldSnap=await tx.get(oldRef); }
+      if(needNewTent && newTentId){ newRef=db.collection('tents').doc(newTentId); newSnap=await tx.get(newRef); }
+      if(needNewTent && oldTentId){ const c=((oldSnap.data()||{}).taken)||0; tx.update(oldRef,{taken:Math.max(0,c-1)}); }
+      if(needNewTent && newTentId){ const c=((newSnap.data()||{}).taken)||0; tx.update(newRef,{taken:c+1}); }
+      const gref = GID? db.collection('groups').doc(GID) : db.collection('groups').doc();
+      tx.set(gref, groupData);
+      added.forEach(id=>tx.update(db.collection('registrations').doc(id),{groupId:gref.id}));
+      removed.forEach(id=>tx.update(db.collection('registrations').doc(id),{groupId:firebase.firestore.FieldValue.delete()}));
+    });
+    closeGroup(); toast('已儲存併帳群組');
+  }catch(e){ console.error(e); toast('儲存失敗：'+(e.code||e.message)); btn.disabled=false; }
+}
+async function delGroup(gid){
+  const g=GROUPS[gid]; if(!g)return;
+  if(!confirm('解散此併帳群組？（會釋放該帳位 +1，成員回到未指定狀態）')) return;
+  try{
+    await db.runTransaction(async tx=>{
+      const tref=db.collection('tents').doc(g.tentId);
+      const s=await tx.get(tref); const c=s.exists?(s.data().taken||0):0;
+      tx.update(tref,{taken:Math.max(0,c-1)});
+      (g.members||[]).forEach(id=>tx.update(db.collection('registrations').doc(id),{groupId:firebase.firestore.FieldValue.delete()}));
+      tx.delete(db.collection('groups').doc(gid));
+    });
+    toast('已解散群組');
+  }catch(e){ console.error(e); toast('解散失敗：'+(e.code||e.message)); }
 }
 
 function esc(s){return (s==null?'':(''+s)).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
